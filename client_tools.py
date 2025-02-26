@@ -126,3 +126,7 @@ if st.button("Generate Meal Plan"):
     
     st.markdown('<div class="sub-header">Shopping List & Preparation Instructions</div>', unsafe_allow_html=True)
     st.text_area("Shopping List & Instructions", shopping_instructions, height=300, key="shoppinglist")
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8501))
+    st.run(port=port)
