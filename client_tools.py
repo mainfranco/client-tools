@@ -46,7 +46,8 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.sidebar.markdown(
     """
     ## How It Works
-    1. Enter your daily calorie and macronutrient goals.
+    1. Enter your macronutrient goals (protein, fats, and carbs).  
+       Calories will be calculated dynamically (protein and carbs provide 4 calories/gram; fats provide 9 calories/gram).
     2. List your preferred foods (comma separated).
     3. Optionally, provide additional context about your meal plan requirements.
     4. Click **Generate Meal Plan** to receive your meal plan, shopping list, and prep instructions.
@@ -85,7 +86,7 @@ def create_food_shopping_list_and_meal_instructions(meal_plan):
                 "role": "user",
                 "content": (
                     f"Provide instructions to prepare each item in this meal plan: {meal_plan}. "
-                    f"Also, provide a shopping list of all ingredients needed."
+                    f"Also, provide a shopping list of all ingredients needed. Try to be sensible with the quantities and measurements (e.g., chicken in pounds, etc.)."
                 )
             }
         ]
@@ -98,37 +99,36 @@ def get_meal_plan_and_instructions(calories, protein, fats, carbs, preferences_l
     return meal_plan, shopping_list_instructions
 
 # Input section header
-st.markdown('<div class="sub-header">Enter Your Nutrition Goals & Preferences</div>', unsafe_allow_html=True)
-st.markdown('<p class="description">Specify your daily calorie target, macros, and preferred foods below.</p>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Enter Your Macronutrient Goals & Preferences</div>', unsafe_allow_html=True)
+st.markdown('<p class="description">Specify your macronutrient targets and preferred foods below.</p>', unsafe_allow_html=True)
 
-# Use columns for a cleaner layout
+# Input for macros using columns for a cleaner layout
 col1, col2 = st.columns(2)
 with col1:
-    calories = st.number_input("Total Daily Calories", min_value=0, value=2000, step=100)
-with col2:
     protein = st.number_input("Protein (g)", min_value=0, value=150, step=10)
+with col2:
+    fats = st.number_input("Fats (g)", min_value=0, value=50, step=5)
 
 col3, col4 = st.columns(2)
 with col3:
-    fats = st.number_input("Fats (g)", min_value=0, value=50, step=5)
-with col4:
     carbs = st.number_input("Carbs (g)", min_value=0, value=200, step=10)
+
+# Dynamically calculate the total calories based on macros
+calculated_calories = protein * 4 + carbs * 4 + fats * 9
+st.markdown(f"### Calculated Total Daily Calories: **{calculated_calories}**")
 
 st.markdown("<br>", unsafe_allow_html=True)
 preferences_input = st.text_area("Food Preferences (comma separated)", value="chicken, rice, broccoli", height=80)
-
 st.markdown("<br>", unsafe_allow_html=True)
-# New context input
 context_input = st.text_area("Additional Context", value="e.g., dietary restrictions, flavor preferences, time constraints", height=80)
-
 st.markdown("<br>", unsafe_allow_html=True)
+
 if st.button("Generate Meal Plan"):
     with st.spinner("Generating your personalized meal plan..."):
         preferences_list = [pref.strip() for pref in preferences_input.split(",") if pref.strip()]
         meal_plan, shopping_instructions = get_meal_plan_and_instructions(
-            calories, protein, fats, carbs, preferences_list, context_input
+            calculated_calories, protein, fats, carbs, preferences_list, context_input
         )
-    
     st.markdown('<div class="sub-header">Your Meal Plan</div>', unsafe_allow_html=True)
     st.text_area("Meal Plan", meal_plan, height=300, key="mealplan")
     
