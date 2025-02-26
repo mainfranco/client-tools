@@ -4,6 +4,10 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()  # Ensure your .env file contains your OPENAI_API key
+st.set_page_config(page_title="Meal Plan Generator")
+
+# Get the Heroku-assigned port
+port = int(os.environ.get("PORT", 8501))  # Default to 8501 for local testing
 
 # Custom CSS for improved styling
 st.markdown(
@@ -127,6 +131,5 @@ if st.button("Generate Meal Plan"):
     st.markdown('<div class="sub-header">Shopping List & Preparation Instructions</div>', unsafe_allow_html=True)
     st.text_area("Shopping List & Instructions", shopping_instructions, height=300, key="shoppinglist")
 
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 8501))
-    st.run(port=port)
+
+
