@@ -99,8 +99,8 @@ def create_ingredients_list(meal_plan):
             {"role": "developer", "content": "You are a meal planning assistant."},
             {"role": "user", "content": (
                 f"Given the following meal plan: {meal_plan} "
-                "extract and list all the ingredients needed in a clear, concise list with quantities."
-                "The ingredients list should fulfill one entire week of meal prep and specify that its for one week"
+                f"extract and list all the ingredients needed in a clear, concise list with quantities."
+                f"The ingredients list should fulfill one entire week of meal prep and specify that its for one week"
             )}
         ]
     )
@@ -114,8 +114,8 @@ def create_cooking_instructions(meal_plan):
             {"role": "developer", "content": "You are a meal planning assistant."},
             {"role": "user", "content": (
                 f"Given the following meal plan: {meal_plan} "
-                "provide detailed cooking instructions for each meal. Break down the instructions by meal." 
-                "Start each message like this: Here are the detailed cooking instructions for each meal in the given meal plan:"
+                f"provide detailed cooking instructions for each meal. Break down the instructions by meal." 
+                f"Start each message like this: Here are the detailed cooking instructions for each meal in the given meal plan:"
             )}
         ]
     )
