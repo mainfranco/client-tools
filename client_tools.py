@@ -82,6 +82,7 @@ def create_meal_plan(calories, protein, fats, carbs, preferences_list, context):
                 f"Provide a meal plan that utilizes the following foods and ingredients {preferences_list}. "
                 f"The total amounts for the day should add up to {calories} calories, with {protein} grams of protein, "
                 f"{fats} grams of fats, and {carbs} grams of carbs. Just directly send the meal plan without commentary. "
+                f"Really try your best to get as close to the total macros and calories as possible."
                 f"Include specific measurements (in grams or standard portions)."
                 f"Be sure to include the total calories and macros below each meal and once at the bottom for the days total macros and calories."
                 f"Finally, consider this additional context: {context}"
