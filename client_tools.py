@@ -100,6 +100,7 @@ def create_ingredients_list(meal_plan):
             {"role": "user", "content": (
                 f"Given the following meal plan: {meal_plan} "
                 "extract and list all the ingredients needed in a clear, concise list with quantities."
+                "The ingredients list should fulfill one entire week of meal prep and specify that its for one week"
             )}
         ]
     )
