@@ -4,10 +4,6 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 load_dotenv()  # Ensure your .env file contains your OPENAI_API key
-st.set_page_config(page_title="Meal Plan Generator")
-
-# Get the Heroku-assigned port
-port = int(os.environ.get("PORT", 8501))  # Default to 8501 for local testing
 
 # Custom CSS for improved styling
 st.markdown(
@@ -52,12 +48,13 @@ st.sidebar.markdown(
     ## How It Works
     1. Enter your daily calorie and macronutrient goals.
     2. List your preferred foods (comma separated).
-    3. Click **Generate Meal Plan** to receive your meal plan, shopping list, and prep instructions.
+    3. Optionally, provide additional context about your meal plan requirements.
+    4. Click **Generate Meal Plan** to receive your meal plan, shopping list, and prep instructions.
     """
 )
 
 # Functions to generate meal plan and instructions
-def create_meal_plan(calories, protein, fats, carbs, preferences_list):
+def create_meal_plan(calories, protein, fats, carbs, preferences_list, context):
     openai_client = OpenAI(api_key=os.getenv("OPENAI_API"))
     completion = openai_client.chat.completions.create(
         model="gpt-4o",
@@ -70,7 +67,8 @@ def create_meal_plan(calories, protein, fats, carbs, preferences_list):
                     f"The total amounts for the day should add up to {calories} calories, with {protein} grams of protein, "
                     f"{fats} grams of fats, and {carbs} grams of carbs. Just directly send the meal plan without commentary. "
                     f"Include specific measurements (in grams or standard portions). "
-                    f"You don't need to include every food. Do what you think best to make the macros and calories work using the listed foods."
+                    f"You don't need to include every food. Do what you think best to make the macros and calories work using the listed foods. "
+                    f"Finally, consider this additional context: {context}"
                 )
             }
         ]
@@ -94,8 +92,8 @@ def create_food_shopping_list_and_meal_instructions(meal_plan):
     )
     return completion.choices[0].message.content
 
-def get_meal_plan_and_instructions(calories, protein, fats, carbs, preferences_list):
-    meal_plan = create_meal_plan(calories, protein, fats, carbs, preferences_list)
+def get_meal_plan_and_instructions(calories, protein, fats, carbs, preferences_list, context):
+    meal_plan = create_meal_plan(calories, protein, fats, carbs, preferences_list, context)
     shopping_list_instructions = create_food_shopping_list_and_meal_instructions(meal_plan)
     return meal_plan, shopping_list_instructions
 
@@ -120,16 +118,19 @@ st.markdown("<br>", unsafe_allow_html=True)
 preferences_input = st.text_area("Food Preferences (comma separated)", value="chicken, rice, broccoli", height=80)
 
 st.markdown("<br>", unsafe_allow_html=True)
+# New context input
+context_input = st.text_area("Additional Context", value="e.g., dietary restrictions, flavor preferences, time constraints", height=80)
+
+st.markdown("<br>", unsafe_allow_html=True)
 if st.button("Generate Meal Plan"):
     with st.spinner("Generating your personalized meal plan..."):
         preferences_list = [pref.strip() for pref in preferences_input.split(",") if pref.strip()]
-        meal_plan, shopping_instructions = get_meal_plan_and_instructions(calories, protein, fats, carbs, preferences_list)
+        meal_plan, shopping_instructions = get_meal_plan_and_instructions(
+            calories, protein, fats, carbs, preferences_list, context_input
+        )
     
     st.markdown('<div class="sub-header">Your Meal Plan</div>', unsafe_allow_html=True)
     st.text_area("Meal Plan", meal_plan, height=300, key="mealplan")
     
     st.markdown('<div class="sub-header">Shopping List & Preparation Instructions</div>', unsafe_allow_html=True)
     st.text_area("Shopping List & Instructions", shopping_instructions, height=300, key="shoppinglist")
-
-
-
