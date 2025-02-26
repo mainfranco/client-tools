@@ -1,1 +1,1 @@
-web: streamlit run meal_plan_app.py --server.enableCORS false 
+web: streamlit run client_tools.py --server.enableCORS false 
