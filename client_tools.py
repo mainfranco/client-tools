@@ -112,7 +112,8 @@ def create_cooking_instructions(meal_plan):
             {"role": "developer", "content": "You are a meal planning assistant."},
             {"role": "user", "content": (
                 f"Given the following meal plan: {meal_plan} "
-                "provide detailed cooking instructions for each meal. Break down the instructions by meal."
+                "provide detailed cooking instructions for each meal. Break down the instructions by meal." 
+                "Start each message like this: Here are the detailed cooking instructions for each meal in the given meal plan:"
             )}
         ]
     )
