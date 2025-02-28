@@ -60,19 +60,21 @@ st.sidebar.markdown(
     """
 )
 
-# Helper function to generate a PDF from text using fpdf2
+# ------------------------------------------------------------------------------
+# Helper function to generate a PDF from text (remove non-ASCII characters first)
+# ------------------------------------------------------------------------------
 def generate_pdf(text):
+    # Remove any non-ASCII characters to avoid FPDFUnicodeEncodingException
+    clean_text = text.encode("ascii", errors="ignore").decode("ascii")
+    
     pdf = FPDF()
     pdf.add_page()
-    # Add a Unicode font; ensure the TTF file is in your project directory
-    pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
-    pdf.set_font("DejaVu", size=12)
-    pdf.multi_cell(0, 10, text)
+    pdf.set_font("Arial", size=12)
+    pdf.multi_cell(0, 10, clean_text)
     pdf_bytes = BytesIO()
     pdf.output(pdf_bytes, dest="F")
     pdf_bytes.seek(0)
     return pdf_bytes.getvalue()
-
 
 # OpenAI API functions to generate outputs
 def create_meal_plan(calories, protein, fats, carbs, preferences_list, context):
@@ -117,7 +119,7 @@ def create_cooking_instructions(meal_plan):
             {"role": "developer", "content": "You are a meal planning assistant."},
             {"role": "user", "content": (
                 f"Given the following meal plan: {meal_plan} "
-                f"provide detailed cooking instructions for each meal. Break down the instructions by meal." 
+                f"provide detailed cooking instructions for each meal. Break down the instructions by meal."
                 f"Start each message like this: Here are the detailed cooking instructions for each meal in the given meal plan:"
             )}
         ]
