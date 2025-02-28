@@ -64,12 +64,15 @@ st.sidebar.markdown(
 def generate_pdf(text):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", size=12)
+    # Add a Unicode font; ensure the TTF file is in your project directory
+    pdf.add_font("DejaVu", "", "DejaVuSans.ttf", uni=True)
+    pdf.set_font("DejaVu", size=12)
     pdf.multi_cell(0, 10, text)
     pdf_bytes = BytesIO()
     pdf.output(pdf_bytes, dest="F")
     pdf_bytes.seek(0)
     return pdf_bytes.getvalue()
+
 
 # OpenAI API functions to generate outputs
 def create_meal_plan(calories, protein, fats, carbs, preferences_list, context):
