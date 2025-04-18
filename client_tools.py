@@ -1,22 +1,19 @@
-# meal_plan_generator.py  – 1‑call, o3, fixed section output
+# meal_plan_generator.py  – o3, single call, robust section parsing
 import streamlit as st
-import os
+import os, re
 from dotenv import load_dotenv
 from openai import OpenAI
 from fpdf import FPDF
 from io import BytesIO
 
 # ─── 1. CONFIG ────────────────────────────────────────────────────────────────
-load_dotenv()                                               # needs OPENAI_API
+load_dotenv()                                               # expects OPENAI_API
 MODEL  = "o3"
 client = OpenAI(api_key=os.getenv("OPENAI_API"))            # global client
 
 def call_chat(messages: list[dict], max_tok: int = 900) -> str:
-    """Send prompt list to the model and return raw text."""
     resp = client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        max_tokens=max_tok,          # ← fixed param name
+        model=MODEL, messages=messages, max_tokens=max_tok
     )
     return resp.choices[0].message.content
 
@@ -25,39 +22,36 @@ def call_chat(messages: list[dict], max_tok: int = 900) -> str:
 st.markdown(
     """
     <style>
-    .main-header {background:#4CAF50;padding:15px;color:#fff;text-align:center;
-                  font-size:36px;font-weight:bold;border-radius:5px;}
-    .sub-header  {font-size:24px;font-weight:bold;color:#333;margin-top:20px;}
-    .description {font-size:16px;color:#555;margin-bottom:10px;}
-    .stTextArea textarea {font-family:'Courier New',monospace;font-size:16px;}
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+      .main-header{background:#4CAF50;padding:15px;color:#fff;text-align:center;
+                    font-size:36px;font-weight:bold;border-radius:5px;}
+      .sub-header {font-size:24px;font-weight:bold;color:#333;margin-top:20px;}
+      .description{font-size:16px;color:#555;margin-bottom:10px;}
+      .stTextArea textarea{font-family:'Courier New',monospace;font-size:16px;}
+    </style>""",
+    unsafe_allow_html=True)
 st.markdown('<div class="main-header">Meal Plan Generator</div>', unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
 
 st.sidebar.markdown(
     """
     ## How It Works
-    1. Enter macro targets (calories auto‑compute).  
-    2. List preferred foods and optional context.  
-    3. Click **Generate Meal Plan** – you’ll get:  
-       • daily plan with per‑meal macros  
+    1. Enter macros (calories auto‑compute).  
+    2. List preferred foods + optional context.  
+    3. Click **Generate** → you’ll get  
+       • daily plan with macros  
        • one‑week ingredients list  
-       • concise cooking instructions  
+       • concise cooking steps  
     """
 )
 
 # ─── 3. UTILITIES ─────────────────────────────────────────────────────────────
 def generate_pdf(text: str) -> bytes:
-    txt = text.encode("ascii", errors="ignore").decode("ascii")
+    cleaned = text.encode("ascii", errors="ignore").decode("ascii")
     pdf, buf = FPDF(), BytesIO()
     pdf.set_auto_page_break(True, margin=15)
     pdf.add_page(); pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, txt)
-    pdf.output(buf, dest="F")
-    buf.seek(0)
+    pdf.multi_cell(0, 10, cleaned)
+    pdf.output(buf, dest="F"); buf.seek(0)
     return buf.getvalue()
 
 
@@ -65,15 +59,14 @@ SYSTEM_MSG = {
     "role": "system",
     "content": (
         "You are a concise meal‑planning assistant. "
-        "Produce **only** the following markdown template, replacing the "
-        "placeholders with real content:\n\n"
+        "Respond *only* with this markdown template, filling in details:\n\n"
         "### Meal Plan\n"
-        "<meal plan with weights, per‑meal macros & daily totals>\n\n"
+        "<list meals with serving weights, per‑meal macros & daily totals>\n\n"
         "### Ingredients\n"
         "<one‑week shopping list for ONE person with quantities>\n\n"
         "### Cooking\n"
-        "<bullet instructions for each meal, ≈120 tokens total>\n\n"
-        "No commentary before or after these three sections."
+        "<bullet instructions for each meal, about 120 tokens total>\n\n"
+        "No text before or after the three sections."
     ),
 }
 
@@ -84,21 +77,17 @@ def build_all_outputs(kcal, p, f, c, prefs: str, ctx: str) -> tuple[str, str, st
         f"Preferred foods: {prefs or 'any'}.\n"
         f"Extra context: {ctx or 'none'}."
     )
-    full_text = call_chat([SYSTEM_MSG, {"role": "user", "content": prompt}])
+    full = call_chat([SYSTEM_MSG, {"role": "user", "content": prompt}])
 
-    # Parse by headings
-    sections = {h: "" for h in ["Meal Plan", "Ingredients", "Cooking"]}
-    current = None
-    for line in full_text.splitlines():
-        if line.startswith("### "):
-            current = line[4:].strip()
-            continue
-        if current in sections:
-            sections[current] += line + "\n"
+    # robust regex capture
+    m = re.search(
+        r"###\s*Meal Plan\s*(.*?)\s*###\s*Ingredients\s*(.*?)\s*###\s*Cooking\s*(.*)",
+        full, flags=re.DOTALL | re.IGNORECASE)
+    if not m:
+        return full.strip(), "⚠️ Parser failed – see raw response", ""
 
-    return (sections["Meal Plan"].strip(),
-            sections["Ingredients"].strip(),
-            sections["Cooking"].strip())
+    meal_plan, ingredients, cooking = (s.strip() for s in m.groups())
+    return meal_plan, ingredients, cooking
 
 
 # ─── 4. INPUTS ────────────────────────────────────────────────────────────────
@@ -116,10 +105,10 @@ prefs_input   = st.text_area("Food Preferences (comma separated)", "chicken, ric
 context_input = st.text_area("Additional Context (optional)",
                              "e.g., lactose‑free, 20‑min prep limit")
 
-# ─── 5. GENERATE (single API call) ───────────────────────────────────────────
+# ─── 5. GENERATE ──────────────────────────────────────────────────────────────
 if st.button("Generate Meal Plan"):
     with st.spinner("Building your plan… this may take 1–2 minutes"):
-        prefs_str = ", ".join([x.strip() for x in prefs_input.split(",") if x.strip()])
+        prefs_str = ", ".join(x.strip() for x in prefs_input.split(",") if x.strip())
         plan, ingr, cook = build_all_outputs(calories, protein, fats, carbs,
                                              prefs_str, context_input)
 
