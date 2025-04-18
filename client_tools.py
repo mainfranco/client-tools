@@ -1,3 +1,4 @@
+# meal_plan_generator.py
 import streamlit as st
 import os
 from dotenv import load_dotenv
@@ -5,224 +6,177 @@ from openai import OpenAI
 from fpdf import FPDF
 from io import BytesIO
 
-load_dotenv()  # Ensure your .env file contains your OPENAI_API key
+# ────────────────────────────────────────────────────────────────────────────────
+# 1.  CONFIG
+# ────────────────────────────────────────────────────────────────────────────────
+load_dotenv()                                           # reads OPENAI_API
+MODEL  = "o3"                                           # <── only change needed
+client = OpenAI(api_key=os.getenv("OPENAI_API"))        # one global client
 
-# Custom CSS for improved styling
+
+def call_chat(messages: list[dict]) -> str:
+    """Send a list of chat messages to the chosen model and return the text."""
+    resp = client.chat.completions.create(model=MODEL, messages=messages)
+    return resp.choices[0].message.content
+
+
+# ────────────────────────────────────────────────────────────────────────────────
+# 2.  STREAMLIT STYLING
+# ────────────────────────────────────────────────────────────────────────────────
 st.markdown(
     """
     <style>
     .main-header {
-        background-color: #4CAF50;
-        padding: 15px;
-        color: white;
-        text-align: center;
-        font-size: 36px;
-        font-weight: bold;
-        border-radius: 5px;
+        background-color: #4CAF50; padding: 15px; color: white;
+        text-align: center; font-size: 36px; font-weight: bold; border-radius: 5px;
     }
-    .sub-header {
-        font-size: 24px;
-        font-weight: bold;
-        color: #333;
-        margin-top: 20px;
-    }
-    .description {
-        font-size: 16px;
-        color: #555;
-        margin-bottom: 10px;
-    }
-    .stTextArea textarea {
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 16px;
-    }
+    .sub-header { font-size: 24px; font-weight: bold; color: #333; margin-top: 20px; }
+    .description { font-size: 16px; color: #555; margin-bottom: 10px; }
+    .stTextArea textarea { font-family: 'Courier New', monospace; font-size: 16px; }
     </style>
     """,
     unsafe_allow_html=True
 )
-
-# Main header
 st.markdown('<div class="main-header">Meal Plan Generator</div>', unsafe_allow_html=True)
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Sidebar instructions
+# ────────────────────────────────────────────────────────────────────────────────
+# 3.  SIDEBAR INSTRUCTIONS
+# ────────────────────────────────────────────────────────────────────────────────
 st.sidebar.markdown(
     """
-    ## How It Works
-    1. Enter your macronutrient goals (protein, fats, and carbs).  
-       Calories will be calculated dynamically (protein & carbs: 4 cal/g; fats: 9 cal/g).
-    2. List your preferred foods (comma separated).
-    3. Optionally, provide additional context about your meal plan requirements.
-    4. Click **Generate Meal Plan** to receive:
-         - A complete meal plan
-         - An ingredients list
-         - Cooking instructions for each meal
-         - Bulk cooking instructions for batch preparation over several days
+    ## How It Works
+    1. Enter macro goals. Calories auto‑calculate (4 / 4 / 9 rule).  
+    2. List preferred foods.  
+    3. (Optional) add extra context.  
+    4. Click **Generate Meal Plan** ➜ The app returns:  
+       * daily plan with per‑meal macros  
+       * weekly ingredients list  
+       * cooking instructions  
+       * bulk‑prep guide
     """
 )
 
-# ------------------------------------------------------------------------------
-# Helper function to generate a PDF from text (remove non-ASCII characters first)
-# ------------------------------------------------------------------------------
-def generate_pdf(text):
-    # Remove any non-ASCII characters to avoid FPDFUnicodeEncodingException
-    clean_text = text.encode("ascii", errors="ignore").decode("ascii")
-    
+# ────────────────────────────────────────────────────────────────────────────────
+# 4.  UTILITIES
+# ────────────────────────────────────────────────────────────────────────────────
+def generate_pdf(text: str) -> bytes:
+    """Return a PDF (bytes) from plain text, stripping non‑ASCII."""
+    clean = text.encode("ascii", errors="ignore").decode("ascii")
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, clean_text)
-    pdf_bytes = BytesIO()
-    pdf.output(pdf_bytes, dest="F")
-    pdf_bytes.seek(0)
-    return pdf_bytes.getvalue()
+    pdf.multi_cell(0, 10, clean)
+    buf = BytesIO()
+    pdf.output(buf, dest="F")
+    buf.seek(0)
+    return buf.getvalue()
 
-# OpenAI API functions to generate outputs
-def create_meal_plan(calories, protein, fats, carbs, preferences_list, context):
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API"))
-    completion = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "developer", "content": "You are a meal planning assistant."},
-            {"role": "user", "content": (
-                f"Provide a meal plan that utilizes the following foods and ingredients {preferences_list}. "
-                f"The total amounts for the day should add up to {calories} calories, with {protein} grams of protein, "
-                f"{fats} grams of fats, and {carbs} grams of carbs. Just directly send the meal plan without commentary. "
-                f"Really try your best to get as close to the total macros and calories as possible."
-                f"Include specific measurements (in grams or standard portions)."
-                f"Be sure to include the total calories and macros below each meal and once at the bottom for the days total macros and calories."
-                f"Finally, consider this additional context: {context}"
-            )}
-        ]
-    )
-    return completion.choices[0].message.content
+# Chat helpers ----------------------------------------------------
+SYSTEM_MSG = {"role": "system", "content": "You are a meal‑planning assistant."}
 
-def create_ingredients_list(meal_plan):
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API"))
-    completion = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "developer", "content": "You are a meal planning assistant."},
-            {"role": "user", "content": (
-                f"Given the following meal plan: {meal_plan} "
-                f"extract and list all the ingredients needed in a clear, concise list with quantities."
-                f"The ingredients list should fulfill one entire week of meal prep and specify that its for one week"
-            )}
-        ]
-    )
-    return completion.choices[0].message.content
 
-def create_cooking_instructions(meal_plan):
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API"))
-    completion = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "developer", "content": "You are a meal planning assistant."},
-            {"role": "user", "content": (
-                f"Given the following meal plan: {meal_plan} "
-                f"provide detailed cooking instructions for each meal. Break down the instructions by meal."
-                f"Start each message like this: Here are the detailed cooking instructions for each meal in the given meal plan:"
-            )}
-        ]
-    )
-    return completion.choices[0].message.content
+def create_meal_plan(kcal, p, f, c, prefs, ctx):
+    return call_chat([
+        SYSTEM_MSG,
+        {"role": "user", "content":
+            (f"Create a daily meal plan using: {prefs}. "
+             f"Hit exactly {kcal} kcal, {p} g protein, {f} g fat, {c} g carbs. "
+             "Show each meal with weights/servings and macros, then the daily total only—no extra commentary. "
+             f"Additional context: {ctx}")
+        }
+    ])
 
-def create_bulk_cooking_instructions(meal_plan):
-    openai_client = OpenAI(api_key=os.getenv("OPENAI_API"))
-    completion = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "developer", "content": "You are a meal planning assistant."},
-            {"role": "user", "content": (
-                f"Given the following meal plan: {meal_plan} "
-                "provide instructions for preparing each meal in bulk. The instructions should be geared toward batch cooking for multiple days, "
-                "including storage suggestions and reheating instructions."
-            )}
-        ]
-    )
-    return completion.choices[0].message.content
 
-def get_all_outputs(calories, protein, fats, carbs, preferences_list, context):
-    meal_plan = create_meal_plan(calories, protein, fats, carbs, preferences_list, context)
-    ingredients_list = create_ingredients_list(meal_plan)
-    cooking_instructions = create_cooking_instructions(meal_plan)
-    bulk_cooking_instructions = create_bulk_cooking_instructions(meal_plan)
-    return meal_plan, ingredients_list, cooking_instructions, bulk_cooking_instructions
+def create_ingredients_list(plan):
+    return call_chat([
+        SYSTEM_MSG,
+        {"role": "user", "content":
+            (f"From this meal plan: {plan} "
+             "produce a one‑week shopping list with quantities for one person.")}
+    ])
 
-# Input section header
+
+def create_cooking_instructions(plan):
+    return call_chat([
+        SYSTEM_MSG,
+        {"role": "user", "content":
+            (f"Here is a meal plan: {plan} "
+             "write detailed cooking instructions for each meal—start with "
+             "\"Here are the detailed cooking instructions…\"")}
+    ])
+
+
+def create_bulk_instructions(plan):
+    return call_chat([
+        SYSTEM_MSG,
+        {"role": "user", "content":
+            (f"For this plan: {plan} "
+             "give batch‑cooking steps for several days, plus storage & reheating tips.")}
+    ])
+
+
+# ────────────────────────────────────────────────────────────────────────────────
+# 5.  UI INPUTS
+# ────────────────────────────────────────────────────────────────────────────────
 st.markdown('<div class="sub-header">Enter Your Macronutrient Goals & Preferences</div>', unsafe_allow_html=True)
-st.markdown('<p class="description">Specify your macronutrient targets and preferred foods below.</p>', unsafe_allow_html=True)
+st.markdown('<p class="description">Specify your macro targets and foods.</p>', unsafe_allow_html=True)
 
-# Input for macros and preferences
 col1, col2 = st.columns(2)
 with col1:
-    protein = st.number_input("Protein (g)", min_value=0, value=150, step=10)
+    protein = st.number_input("Protein (g)", min_value=0, value=170, step=10)
 with col2:
-    fats = st.number_input("Fats (g)", min_value=0, value=50, step=5)
-col3, col4 = st.columns(2)
-with col3:
-    carbs = st.number_input("Carbs (g)", min_value=0, value=200, step=10)
+    fats = st.number_input("Fats (g)", min_value=0, value=90, step=5)
+carbs = st.number_input("Carbs (g)", min_value=0, value=350, step=10)
 
-# Calculate total calories
-calculated_calories = protein * 4 + carbs * 4 + fats * 9
-st.markdown(f"### Calculated Total Daily Calories: **{calculated_calories}**")
+calories = protein * 4 + carbs * 4 + fats * 9
+st.markdown(f"### Calculated Daily Calories: **{calories}**")
 
-st.markdown("<br>", unsafe_allow_html=True)
-preferences_input = st.text_area("Food Preferences (comma separated)", value="chicken, rice, broccoli", height=80)
-st.markdown("<br>", unsafe_allow_html=True)
-context_input = st.text_area("Additional Context", value="e.g., dietary restrictions, flavor preferences, time constraints", height=80)
-st.markdown("<br>", unsafe_allow_html=True)
+prefs_input   = st.text_area("Food Preferences (comma separated)", "chicken, rice, broccoli")
+context_input = st.text_area("Additional Context", "e.g., lactose‑free, 20‑min prep limit")
 
-# Generate outputs when button is clicked
+# ────────────────────────────────────────────────────────────────────────────────
+# 6.  GENERATE OUTPUTS
+# ────────────────────────────────────────────────────────────────────────────────
 if st.button("Generate Meal Plan"):
-    with st.spinner("Generating your personalized meal plan..."):
-        preferences_list = [pref.strip() for pref in preferences_input.split(",") if pref.strip()]
-        meal_plan, ingredients_list, cooking_instructions, bulk_cooking_instructions = get_all_outputs(
-            calculated_calories, protein, fats, carbs, preferences_list, context_input
-        )
-        st.session_state['meal_plan'] = meal_plan
-        st.session_state['ingredients_list'] = ingredients_list
-        st.session_state['cooking_instructions'] = cooking_instructions
-        st.session_state['bulk_cooking_instructions'] = bulk_cooking_instructions
-        st.session_state['meal_plan_pdf'] = generate_pdf(meal_plan)
-        st.session_state['ingredients_pdf'] = generate_pdf(ingredients_list)
-        st.session_state['cooking_pdf'] = generate_pdf(cooking_instructions)
-        st.session_state['bulk_cooking_pdf'] = generate_pdf(bulk_cooking_instructions)
+    with st.spinner("Building your plan…"):
+        prefs = [x.strip() for x in prefs_input.split(",") if x.strip()]
+        prefs_str = ", ".join(prefs)
 
-# Display outputs and download buttons if available in session_state
-if 'meal_plan' in st.session_state:
-    st.markdown('<div class="sub-header">Your Meal Plan</div>', unsafe_allow_html=True)
-    st.text_area("Meal Plan", st.session_state['meal_plan'], height=300, key="mealplan")
-    
-    st.markdown('<div class="sub-header">Ingredients List</div>', unsafe_allow_html=True)
-    st.text_area("Ingredients List", st.session_state['ingredients_list'], height=300, key="ingredients")
-    
+        plan  = create_meal_plan(calories, protein, fats, carbs, prefs_str, context_input)
+        ingr  = create_ingredients_list(plan)
+        cook  = create_cooking_instructions(plan)
+        bulk  = create_bulk_instructions(plan)
+
+        # PDFs
+        st.session_state["pdf_plan"]  = generate_pdf(plan)
+        st.session_state["pdf_ingr"]  = generate_pdf(ingr)
+        st.session_state["pdf_cook"]  = generate_pdf(cook)
+        st.session_state["pdf_bulk"]  = generate_pdf(bulk)
+
+        # plain text
+        st.session_state["plan"]  = plan
+        st.session_state["ingr"]  = ingr
+        st.session_state["cook"]  = cook
+        st.session_state["bulk"]  = bulk
+
+# ────────────────────────────────────────────────────────────────────────────────
+# 7.  DISPLAY & DOWNLOAD
+# ────────────────────────────────────────────────────────────────────────────────
+if "plan" in st.session_state:
+    st.markdown('<div class="sub-header">Meal Plan</div>', unsafe_allow_html=True)
+    st.text_area("Meal Plan", st.session_state["plan"], height=300)
+
+    st.markdown('<div class="sub-header">Ingredients (1 week)</div>', unsafe_allow_html=True)
+    st.text_area("Ingredients", st.session_state["ingr"], height=250)
+
     st.markdown('<div class="sub-header">Cooking Instructions</div>', unsafe_allow_html=True)
-    st.text_area("Cooking Instructions", st.session_state['cooking_instructions'], height=300, key="cooking")
-    
-    st.markdown('<div class="sub-header">Bulk Cooking Instructions</div>', unsafe_allow_html=True)
-    st.text_area("Bulk Cooking Instructions", st.session_state['bulk_cooking_instructions'], height=300, key="bulk")
-    
-    st.download_button(
-        label="Download Meal Plan as PDF",
-        data=st.session_state['meal_plan_pdf'],
-        file_name="meal_plan.pdf",
-        mime="application/pdf"
-    )
-    st.download_button(
-        label="Download Ingredients List as PDF",
-        data=st.session_state['ingredients_pdf'],
-        file_name="ingredients_list.pdf",
-        mime="application/pdf"
-    )
-    st.download_button(
-        label="Download Cooking Instructions as PDF",
-        data=st.session_state['cooking_pdf'],
-        file_name="cooking_instructions.pdf",
-        mime="application/pdf"
-    )
-    st.download_button(
-        label="Download Bulk Cooking Instructions as PDF",
-        data=st.session_state['bulk_cooking_pdf'],
-        file_name="bulk_cooking_instructions.pdf",
-        mime="application/pdf"
-    )
+    st.text_area("Cooking Instructions", st.session_state["cook"], height=300)
+
+    st.markdown('<div class="sub-header">Bulk‑Prep Guide</div>', unsafe_allow_html=True)
+    st.text_area("Bulk Cooking", st.session_state["bulk"], height=300)
+
+    st.download_button("Download Meal Plan PDF", st.session_state["pdf_plan"], "meal_plan.pdf")
+    st.download_button("Download Ingredients PDF", st.session_state["pdf_ingr"], "ingredients.pdf")
+    st.download_button("Download Cooking PDF", st.session_state["pdf_cook"], "cooking.pdf")
+    st.download_button("Download Bulk‑Prep PDF", st.session_state["pdf_bulk"], "bulk_prep.pdf")
