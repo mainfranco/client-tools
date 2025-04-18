@@ -13,7 +13,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API"))            # global client
 
 def call_chat(messages: list[dict], max_tok: int = 900) -> str:
     resp = client.chat.completions.create(
-        model=MODEL, messages=messages, max_tokens=max_tok
+        model=MODEL, messages=messages, max_completion_tokens=max_tok
     )
     return resp.choices[0].message.content
 
