@@ -1,4 +1,4 @@
-# meal_plan_generator.py  ─ streamlined + cheaper (o3, 1 call, no bulk section)
+# meal_plan_generator.py  – 1‑call, o3, fixed section output
 import streamlit as st
 import os
 from dotenv import load_dotenv
@@ -8,15 +8,15 @@ from io import BytesIO
 
 # ─── 1. CONFIG ────────────────────────────────────────────────────────────────
 load_dotenv()                                               # needs OPENAI_API
-MODEL  = "o3"                                               # single model
+MODEL  = "o3"
 client = OpenAI(api_key=os.getenv("OPENAI_API"))            # global client
 
 def call_chat(messages: list[dict], max_tok: int = 900) -> str:
-    """Send prompt list to chosen model and return the text."""
+    """Send prompt list to the model and return raw text."""
     resp = client.chat.completions.create(
         model=MODEL,
         messages=messages,
-        max_completion_tokens=max_tok,
+        max_tokens=max_tok,          # ← fixed param name
     )
     return resp.choices[0].message.content
 
@@ -40,19 +40,18 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.sidebar.markdown(
     """
     ## How It Works
-    1. Enter macro targets. Calories auto‑compute.  
-    2. List preferred foods.  
-    3. Optional context (restrictions, prep time).  
-    4. Press **Generate Meal Plan** – you’ll get:  
-       • a daily plan with per‑meal macros  
-       • a one‑week ingredient list  
+    1. Enter macro targets (calories auto‑compute).  
+    2. List preferred foods and optional context.  
+    3. Click **Generate Meal Plan** – you’ll get:  
+       • daily plan with per‑meal macros  
+       • one‑week ingredients list  
        • concise cooking instructions  
     """
 )
 
 # ─── 3. UTILITIES ─────────────────────────────────────────────────────────────
 def generate_pdf(text: str) -> bytes:
-    txt = text.encode("ascii", errors="ignore").decode("ascii")  # strip Unicode
+    txt = text.encode("ascii", errors="ignore").decode("ascii")
     pdf, buf = FPDF(), BytesIO()
     pdf.set_auto_page_break(True, margin=15)
     pdf.add_page(); pdf.set_font("Arial", size=12)
@@ -66,25 +65,29 @@ SYSTEM_MSG = {
     "role": "system",
     "content": (
         "You are a concise meal‑planning assistant. "
-        "Return exactly THREE markdown sections in this order:\n"
-        "### Meal Plan  – list meals with weights/servings, per‑meal macros+kcals, "
-        "and daily totals.\n"
-        "### Ingredients  – one‑week shopping list for ONE person (quantities).\n"
-        "### Cooking  – bullet instructions for each meal, ≤120 tokens total.\n"
-        "No extra commentary."
+        "Produce **only** the following markdown template, replacing the "
+        "placeholders with real content:\n\n"
+        "### Meal Plan\n"
+        "<meal plan with weights, per‑meal macros & daily totals>\n\n"
+        "### Ingredients\n"
+        "<one‑week shopping list for ONE person with quantities>\n\n"
+        "### Cooking\n"
+        "<bullet instructions for each meal, ≈120 tokens total>\n\n"
+        "No commentary before or after these three sections."
     ),
 }
 
 
 def build_all_outputs(kcal, p, f, c, prefs: str, ctx: str) -> tuple[str, str, str]:
-    user_prompt = (
+    prompt = (
         f"Targets: {kcal} kcal, {p} g protein, {f} g fat, {c} g carbs.\n"
-        f"Preferred foods: {prefs or 'any'}.\nExtra context: {ctx or 'none'}."
+        f"Preferred foods: {prefs or 'any'}.\n"
+        f"Extra context: {ctx or 'none'}."
     )
-    full_text = call_chat([SYSTEM_MSG, {"role": "user", "content": user_prompt}])
+    full_text = call_chat([SYSTEM_MSG, {"role": "user", "content": prompt}])
 
-    # Split sections by markdown headings
-    sections = {h.strip(): "" for h in ["Meal Plan", "Ingredients", "Cooking"]}
+    # Parse by headings
+    sections = {h: "" for h in ["Meal Plan", "Ingredients", "Cooking"]}
     current = None
     for line in full_text.splitlines():
         if line.startswith("### "):
@@ -93,7 +96,9 @@ def build_all_outputs(kcal, p, f, c, prefs: str, ctx: str) -> tuple[str, str, st
         if current in sections:
             sections[current] += line + "\n"
 
-    return sections["Meal Plan"].strip(), sections["Ingredients"].strip(), sections["Cooking"].strip()
+    return (sections["Meal Plan"].strip(),
+            sections["Ingredients"].strip(),
+            sections["Cooking"].strip())
 
 
 # ─── 4. INPUTS ────────────────────────────────────────────────────────────────
@@ -111,16 +116,15 @@ prefs_input   = st.text_area("Food Preferences (comma separated)", "chicken, ric
 context_input = st.text_area("Additional Context (optional)",
                              "e.g., lactose‑free, 20‑min prep limit")
 
-# ─── 5. GENERATE  (single API call) ───────────────────────────────────────────
+# ─── 5. GENERATE (single API call) ───────────────────────────────────────────
 if st.button("Generate Meal Plan"):
     with st.spinner("Building your plan… this may take 1–2 minutes"):
         prefs_str = ", ".join([x.strip() for x in prefs_input.split(",") if x.strip()])
-        plan, ingr, cook = build_all_outputs(calories, protein, fats, carbs, prefs_str, context_input)
+        plan, ingr, cook = build_all_outputs(calories, protein, fats, carbs,
+                                             prefs_str, context_input)
 
         st.session_state.update({
-            "plan": plan,
-            "ingr": ingr,
-            "cook": cook,
+            "plan": plan, "ingr": ingr, "cook": cook,
             "pdf_plan": generate_pdf("Meal Plan\n\n" + plan),
             "pdf_ingr": generate_pdf("Ingredients List (1 week)\n\n" + ingr),
             "pdf_cook": generate_pdf("Cooking Instructions\n\n" + cook),
