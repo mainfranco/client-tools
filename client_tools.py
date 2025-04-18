@@ -139,7 +139,8 @@ context_input = st.text_area("Additional Context", "e.g., lactose‑free, 20‑m
 # 6.  GENERATE OUTPUTS
 # ────────────────────────────────────────────────────────────────────────────────
 if st.button("Generate Meal Plan"):
-    with st.spinner("Building your plan…"):
+    with st.spinner("Building your plan… this can take about 1–2 minutes"):
+
         prefs = [x.strip() for x in prefs_input.split(",") if x.strip()]
         prefs_str = ", ".join(prefs)
 
